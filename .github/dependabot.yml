@@ -1,0 +1,15 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /services/ingestion-api
+    schedule: { interval: weekly }
+    groups:
+      nestjs: { patterns: ["@nestjs/*"] }
+  - package-ecosystem: npm
+    directory: /services/device-simulator
+    schedule: { interval: weekly }
+    groups:
+      nestjs: { patterns: ["@nestjs/*"] }
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: monthly }
