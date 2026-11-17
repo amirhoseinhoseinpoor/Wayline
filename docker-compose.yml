@@ -1,44 +1,60 @@
+name: wayline
+
 services:
   mongo:
-    image: mongo:6
-    container_name: mongo
+    image: mongo:7
     ports:
       - "27017:27017"
     volumes:
       - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   rabbitmq:
-    image: rabbitmq:3-management
-    container_name: rabbitmq
+    image: rabbitmq:3.13-management-alpine
     environment:
-      - RABBITMQ_DEFAULT_USER=guest
-      - RABBITMQ_DEFAULT_PASS=guest
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-wayline}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-wayline}
     ports:
       - "5672:5672"
       - "15672:15672" # management UI
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  backend:
-    build: ./backend
-    container_name: backend
+  ingestion-api:
+    build: ./services/ingestion-api
     ports:
       - "3000:3000"
     environment:
-      - MONGO_URI=mongodb://mongo:27017/wayline
-      - RABBITMQ_URI=amqp://rabbitmq:5672
-      - QUEUE_NAME=telemetry_queue
+      MONGO_URI: mongodb://mongo:27017/wayline
+      AMQP_URL: amqp://${RABBITMQ_USER:-wayline}:${RABBITMQ_PASSWORD:-wayline}@rabbitmq:5672
+      AMQP_PREFETCH: 20
     depends_on:
-      - mongo
-      - rabbitmq
+      mongo:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
 
-  producer:
-    build: ./producer
-    container_name: producer
+  device-simulator:
+    build: ./services/device-simulator
     environment:
-      - RABBITMQ_URI=amqp://rabbitmq:5672
-      - QUEUE_NAME=telemetry_queue
-      - PUBLISH_INTERVAL_MS=5000
+      AMQP_URL: amqp://${RABBITMQ_USER:-wayline}:${RABBITMQ_PASSWORD:-wayline}@rabbitmq:5672
+      DEVICE_COUNT: ${DEVICE_COUNT:-5}
+      PUBLISH_INTERVAL_MS: ${PUBLISH_INTERVAL_MS:-5000}
     depends_on:
-      - rabbitmq
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   mongo-data:
+  rabbitmq-data:
