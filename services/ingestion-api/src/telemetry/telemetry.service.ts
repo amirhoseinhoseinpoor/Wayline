@@ -56,7 +56,7 @@ export class TelemetryService {
 
   /**
    * Stores one batch. Replaying a batch with a known `messageId` returns the
-   * existing record instead of creating a second one, so callers can retry safely.
+   * existing record and derives alerts from its persisted payload.
    */
   async ingest(dto: IngestTelemetryDto): Promise<IngestResult> {
     const readings = sortReadings(dto.readings).map(({ offsetMs, lat, lng, speedMps }) => ({
@@ -66,9 +66,15 @@ export class TelemetryService {
       speedMps,
     }));
     const stats = computeRouteStats(readings);
-    const anomalies = detectAnomalies(readings, this.rules);
+    let batch = {
+      messageId: dto.messageId,
+      deviceId: dto.deviceId,
+      recordedAt: dto.recordedAt,
+      readings,
+    };
 
-    let result: IngestResult;
+    let id: string;
+    let status: IngestStatus = 'created';
     try {
       const created = await this.batches.create({
         messageId: dto.messageId,
@@ -79,25 +85,31 @@ export class TelemetryService {
         payloadBytes: Buffer.byteLength(JSON.stringify(readings)),
       });
       this.logger.debug(`Stored batch ${dto.messageId} from ${dto.deviceId}`);
-      result = { id: created.id as string, status: 'created', alerts: anomalies.length };
+      id = created.id as string;
     } catch (error) {
       if (!isDuplicateKeyError(error)) throw error;
 
       const existing = await this.batches
-        .findOne({ messageId: dto.messageId }, { _id: 1 })
+        .findOne(
+          { messageId: dto.messageId },
+          { deviceId: 1, recordedAt: 1, readings: 1, messageId: 1 },
+        )
         .lean()
         .exec();
       if (!existing) throw error;
       this.logger.log(`Ignored replayed batch ${dto.messageId}`);
-      result = { id: String(existing._id), status: 'duplicate', alerts: anomalies.length };
+      batch = existing;
+      id = String(existing._id);
+      status = 'duplicate';
     }
 
     // Runs for replays too: if a previous attempt crashed after storing the batch
     // but before storing its alerts, the replay completes the job. Only alerts
     // that are actually new are returned, so nothing is announced twice.
-    const newAlerts = await this.alerts.recordForBatch(dto, anomalies);
+    const anomalies = detectAnomalies(batch.readings, this.rules);
+    const newAlerts = await this.alerts.recordForBatch(batch, anomalies);
 
-    if (result.status === 'created') this.publishPosition(dto, readings, stats.distanceMeters);
+    if (status === 'created') this.publishPosition(dto, readings, stats.distanceMeters);
     for (const alert of newAlerts) {
       this.events.publish({
         type: 'alert',
@@ -112,7 +124,7 @@ export class TelemetryService {
       });
     }
 
-    return result;
+    return { id, status, alerts: anomalies.length };
   }
 
   private publishPosition(

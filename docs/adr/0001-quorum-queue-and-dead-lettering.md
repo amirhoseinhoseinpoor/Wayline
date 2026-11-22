@@ -32,7 +32,7 @@ and hide real traffic.
 
 ## Consequences
 
-- No message is lost, and none can loop forever.
+- The delivery limit stops indefinite requeue loops. Valid messages can reach the DLQ during a prolonged database outage.
 - The DLQ can be inspected and replayed from the RabbitMQ management UI.
 - Quorum queues are replicated, so the same design works on a multi-node cluster.
 - A requeued message is redelivered right away, with no backoff. During a long

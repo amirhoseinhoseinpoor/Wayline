@@ -1,7 +1,9 @@
 import { INestApplication } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { ConfigModule } from '@nestjs/config';
-import { MongooseModule } from '@nestjs/mongoose';
+import { getConnectionToken, MongooseModule } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
+import type { Connection } from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import request from 'supertest';
 import type { App } from 'supertest/types';
@@ -13,7 +15,9 @@ import { TelemetryModule } from '../src/telemetry/telemetry.module';
  * is left out; its decision logic has its own unit tests.
  */
 describe('Telemetry API (e2e)', () => {
-  let mongo: MongoMemoryServer;
+  let mongo: MongoMemoryServer | undefined;
+  const externalMongoUri = process.env.WAYLINE_TEST_MONGO_URI;
+  const dbName = `wayline-test-${randomUUID()}`;
   let app: INestApplication<App>;
 
   const http = () => request(app.getHttpServer());
@@ -31,11 +35,15 @@ describe('Telemetry API (e2e)', () => {
   });
 
   beforeAll(async () => {
-    mongo = await MongoMemoryServer.create();
+    let uri = externalMongoUri;
+    if (!uri) {
+      mongo = await MongoMemoryServer.create();
+      uri = mongo.getUri();
+    }
     const moduleRef = await Test.createTestingModule({
       imports: [
         ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true }),
-        MongooseModule.forRoot(mongo.getUri('wayline-test')),
+        MongooseModule.forRoot(uri, { dbName }),
         TelemetryModule,
       ],
     }).compile();
@@ -46,8 +54,14 @@ describe('Telemetry API (e2e)', () => {
   });
 
   afterAll(async () => {
-    await app?.close();
-    await mongo?.stop();
+    try {
+      if (externalMongoUri && app) {
+        await app.get<Connection>(getConnectionToken()).dropDatabase();
+      }
+    } finally {
+      await app?.close();
+      await mongo?.stop();
+    }
   });
 
   it('stores a batch with computed route stats and sorted readings', async () => {

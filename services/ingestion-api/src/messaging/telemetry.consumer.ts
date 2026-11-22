@@ -16,9 +16,8 @@ import { assertTopology, MQTT_EXCHANGE, TELEMETRY_QUEUE } from './topology';
 /**
  * Consumes telemetry batches from RabbitMQ.
  *
- * Messages are acknowledged only after the batch is stored, so a crash never
- * loses data; the broker redelivers instead. Redelivery is harmless because
- * ingestion is idempotent on `messageId`.
+ * Acknowledge after the batch and its alerts have been processed. Failed
+ * deliveries can be retried up to the broker's configured delivery limit.
  */
 @Injectable()
 export class TelemetryConsumer implements OnApplicationBootstrap, OnApplicationShutdown {

@@ -1,6 +1,6 @@
 # Wayline
 
-[![CI](https://github.com/amirhoseinhoseinpoor/iot-signal-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/amirhoseinhoseinpoor/iot-signal-pipeline/actions/workflows/ci.yml)
+[![CI](https://github.com/amirhoseinhoseinpoor/Wayline/actions/workflows/ci.yml/badge.svg)](https://github.com/amirhoseinhoseinpoor/Wayline/actions/workflows/ci.yml)
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 
@@ -34,10 +34,10 @@ flowchart LR
 
 **Ingestion**
 
-- **AMQP and MQTT.** Both transports feed one queue with the same guarantees. MQTT goes through RabbitMQ's plugin, so no extra broker or bridge is needed.
-- **No data loss on crash.** A message is acknowledged only after it is stored; otherwise the broker redelivers it.
-- **Exactly-once storage on top of at-least-once delivery.** Every batch carries a `messageId`, backed by a unique index.
-- **Poison messages are isolated.** Invalid batches go straight to a dead-letter queue, and transient failures are retried five times before they are dead-lettered.
+- **AMQP and MQTT.** Both transports feed one queue and share the consumer retry and DLQ policy. MQTT goes through RabbitMQ's plugin, so no extra broker or bridge is needed.
+- **Acknowledgement after processing.** The consumer acknowledges after the batch and alert writes complete. A publisher confirm only confirms broker acceptance.
+- **Idempotent writes.** Unique indexes prevent duplicate batch and alert records under replay. The first stored batch supplies the payload for alert computation.
+- **Bounded retries.** Invalid batches are rejected to the dead-letter queue. Requeued processing failures can exhaust the quorum queue delivery limit (5) and reach the DLQ, including otherwise valid messages.
 - **Device and topic binding.** An MQTT message whose payload claims a different device than its topic is rejected.
 - **Self-healing connections.** Both services reconnect to the broker automatically.
 
@@ -192,6 +192,23 @@ checks that:
 - devices report over both AMQP and MQTT
 - alerts are raised
 - the dead-letter queue stays empty
+
+## Reliability experiment
+
+What happens to confirmed AMQP messages during a MongoDB outage, and what does
+replaying a message change? From the repository root with Node.js 22 and Docker
+Compose v2:
+
+```sh
+node scripts/reliability/run.mjs
+```
+
+On 2026-11-22, 11 confirmed publishes covered 8 IDs. Four IDs stored one batch
+each and raised two alerts in total. All four outage IDs reached the DLQ at the
+delivery limit. Three replay publishes added no records. The source queue
+drained, no confirmed ID went unexplained, and observed post-ping settlement
+took 1.362 s. This is a single run on one broker and database under a small
+fixed workload. See the [method and per-ID results](docs/reliability-experiment.md).
 
 ## Design decisions
 
