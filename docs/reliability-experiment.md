@@ -28,8 +28,8 @@ GitHub Actions runs the existing unit/API tests and stack smoke test on PRs.
 For a local API e2e run with an existing MongoDB instance, set
 `WAYLINE_TEST_MONGO_URI` before running `npm run test:e2e`. The suite creates
 and drops a randomly named test database on that instance.
-The separate **Reliability experiment** workflow is manually dispatched and
-uploads the console log and JSON report. The outage run takes several minutes.
+The separate **Reliability experiment** workflow runs on PRs touching the experiment or core ingestion code. It can also
+be dispatched manually and uploads the console log with the JSON report. The outage run takes several minutes.
 
 ## Production path
 
