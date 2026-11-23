@@ -1,0 +1,32 @@
+name: Reliability experiment
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/reliability.yml"
+      - "compose.reliability.yml"
+      - "scripts/reliability/**"
+      - "services/ingestion-api/src/messaging/**"
+      - "services/ingestion-api/src/telemetry/**"
+
+permissions:
+  contents: read
+
+jobs:
+  mongo-outage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run MongoDB outage experiment
+        shell: bash
+        run: node scripts/reliability/run.mjs | tee reliability-run.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reliability-run
+          path: reliability-run.log
