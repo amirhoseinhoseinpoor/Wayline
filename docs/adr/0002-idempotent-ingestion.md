@@ -21,9 +21,9 @@ distance totals.
 
 ## Consequences
 
-- Storage is effectively exactly once, without distributed transactions.
+- Unique indexes prevent duplicate records. Batch and alert writes are separate operations.
 - The unique index is enforced by the database, so it also holds under concurrent
   consumers. A read-then-write check in application code would not.
-- Clients must generate unique ids. If a client reuses an id for different data,
-  the second batch is silently treated as a replay. This is documented in the API
-  contract.
+- Clients must generate unique ids. If a client reuses an ID for different data,
+  the original stored payload is used for alert computation and the response
+  still reports a duplicate.

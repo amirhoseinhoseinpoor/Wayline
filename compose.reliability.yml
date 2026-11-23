@@ -1,0 +1,43 @@
+services:
+  mongo:
+    image: mongo:7
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "quit(db.adminCommand({ping: 1}).ok === 1 ? 0 : 1)"]
+      interval: 2s
+      timeout: 5s
+      retries: 20
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: wayline
+      RABBITMQ_DEFAULT_PASS: wayline
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+      interval: 2s
+      timeout: 5s
+      retries: 20
+
+  ingestion-api:
+    build: ./services/ingestion-api
+    environment:
+      MONGO_URI: mongodb://mongo:27017/wayline
+      AMQP_URL: amqp://wayline:wayline@rabbitmq:5672
+      AMQP_PREFETCH: 20
+      OVERSPEED_LIMIT_MPS: 33.3
+      MAX_IMPLIED_SPEED_MPS: 70
+    depends_on:
+      mongo:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - ./scripts/reliability:/experiment:ro
+
+volumes:
+  mongo-data:
+  rabbitmq-data:

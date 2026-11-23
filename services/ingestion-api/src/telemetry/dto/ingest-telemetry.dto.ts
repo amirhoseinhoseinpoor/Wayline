@@ -46,7 +46,7 @@ export class ReadingDto {
 export class IngestTelemetryDto {
   @ApiProperty({
     example: '3f1c9a4e-8d2b-4c55-9a51-0b7c2e6f1d90',
-    description: 'Unique per batch; resending the same id is a no-op (idempotency key)',
+    description: 'Unique per batch. The first stored payload wins on replay.',
   })
   @IsString()
   @Length(1, 128)
